@@ -39,7 +39,7 @@ var (
 const (
 	idLen     = 8
 	prefixLen = 1 + idLen /*tableID*/ + 2
-	// RecordRowKeyLen is public for calculating avgerage row size.
+	// RecordRowKeyLen is public for calculating average row size.
 	RecordRowKeyLen       = prefixLen + idLen /*handle*/
 	tablePrefixLength     = 1
 	recordPrefixSepLength = 2
@@ -72,6 +72,25 @@ func EncodeRowKeyWithHandle(tableID int64, handle int64) kv.Key {
 // DecodeRecordKey decodes the key and gets the tableID, handle.
 func DecodeRecordKey(key kv.Key) (tableID int64, handle int64, err error) {
 	/* Your code here */
+	// key structure: t{tableId8}_r{handle8}
+	// check key length
+	if len(key) != RecordRowKeyLen{
+		err = errors.New("wrong key length")
+		return
+	}
+	// decode tableID
+	tableIDBytes := key[tablePrefixLength:tablePrefixLength + idLen]
+	_, tableID, err = codec.DecodeInt(tableIDBytes)
+	if err != nil {
+		return
+	}
+	// decode handle
+	handleBytes := key[prefixLen:]
+	_, handle, err = codec.DecodeInt(handleBytes)
+	if err != nil {
+		return
+	}
+
 	return
 }
 
@@ -95,6 +114,22 @@ func EncodeIndexSeekKey(tableID int64, idxID int64, encodedValue []byte) kv.Key 
 // DecodeIndexKeyPrefix decodes the key and gets the tableID, indexID, indexValues.
 func DecodeIndexKeyPrefix(key kv.Key) (tableID int64, indexID int64, indexValues []byte, err error) {
 	/* Your code here */
+	// key structure: t{tableID8}_i{idxID8}{indexValues}
+	// decode tableID
+	tableIDBytes := key[tablePrefixLength:tablePrefixLength + idLen]
+	_, tableID, err = codec.DecodeInt(tableIDBytes)
+	if err != nil {
+		return
+	}
+	// decode indexID
+	indexIDBytes := key[prefixLen:RecordRowKeyLen]
+	_, indexID, err = codec.DecodeInt(indexIDBytes)
+	if err != nil {
+		return
+	}
+	// extract indexValues
+	indexValues= key[RecordRowKeyLen:]
+
 	return tableID, indexID, indexValues, nil
 }
 
