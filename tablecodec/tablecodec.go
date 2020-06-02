@@ -75,7 +75,7 @@ func DecodeRecordKey(key kv.Key) (tableID int64, handle int64, err error) {
 	// key structure: t{tableId8}_r{handle8}
 	// check key length
 	if len(key) != RecordRowKeyLen{
-		err = errors.New("wrong key length")
+		//err = errors.New("wrong key length")
 		return
 	}
 	// decode tableID
@@ -117,7 +117,7 @@ func DecodeIndexKeyPrefix(key kv.Key) (tableID int64, indexID int64, indexValues
 	// key structure: t{tableID8}_i{idxID8}{indexValues}
 	// check length
 	if len(key) < RecordRowKeyLen{
-		err = errors.New("wrong key length")
+		//err = errors.New("wrong key length")
 		return
 	}
 	// decode tableID
