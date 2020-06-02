@@ -115,6 +115,11 @@ func EncodeIndexSeekKey(tableID int64, idxID int64, encodedValue []byte) kv.Key 
 func DecodeIndexKeyPrefix(key kv.Key) (tableID int64, indexID int64, indexValues []byte, err error) {
 	/* Your code here */
 	// key structure: t{tableID8}_i{idxID8}{indexValues}
+	// check length
+	if len(key) < RecordRowKeyLen{
+		err = errors.New("wrong key length")
+		return
+	}
 	// decode tableID
 	tableIDBytes := key[tablePrefixLength:tablePrefixLength + idLen]
 	_, tableID, err = codec.DecodeInt(tableIDBytes)
