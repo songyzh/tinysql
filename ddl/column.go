@@ -222,8 +222,8 @@ func onDropColumn(t *meta.Meta, job *model.Job) (ver int64, _ error) {
 		// To be filled
 		colInfo.State = model.StateWriteOnly
 		isNotNull := mysql.HasNotNullFlag(colInfo.Flag)
-		hasDefaultValue := colInfo.DefaultValue != nil
-		if isNotNull && !hasDefaultValue {
+		noDefaultValue := colInfo.DefaultValue == nil
+		if noDefaultValue && isNotNull {
 			// need default value
 			colInfo.DefaultValue = colInfo.OriginDefaultValue
 		}
