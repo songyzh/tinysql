@@ -221,8 +221,12 @@ func onDropColumn(t *meta.Meta, job *model.Job) (ver int64, _ error) {
 	case model.StatePublic:
 		// To be filled
 		colInfo.State = model.StateWriteOnly
-		colInfo.Flag &= ^mysql.NotNullFlag
-		colInfo.DefaultValue = nil
+		isNotNull := mysql.HasNotNullFlag(colInfo.Flag)
+		hasDefaultValue := colInfo.DefaultValue != nil
+		if isNotNull && !hasDefaultValue {
+			// need default value
+			colInfo.DefaultValue = colInfo.OriginDefaultValue
+		}
 		adjustColumnInfoInDropColumn(tblInfo, colInfo.Offset)
 		ver, err = updateVersionAndTableInfoWithCheck(t, job, tblInfo, originalState != colInfo.State)
 	case model.StateWriteOnly:
