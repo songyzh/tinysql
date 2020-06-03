@@ -14,7 +14,6 @@ package core
 
 import (
 	"context"
-
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/mysql"
@@ -356,8 +355,37 @@ func (la *LogicalAggregation) PredicatePushDown(predicates []expression.Expressi
 	// TODO: Here you need to push the predicates across the aggregation.
 	//       A simple example is that `select * from (select count(*) from t group by b) tmp_t where b > 1` is the same with
 	//       `select * from (select count(*) from t where b > 1 group by b) tmp_t.
-	la.baseLogicalPlan.PredicatePushDown(nil)
-	return predicates, la
+	canBePushed := make([]expression.Expression, 0, len(predicates))
+	canNotBePushed := make([]expression.Expression, 0, len(predicates))
+	for _, pred := range predicates {
+		if pred, ok := pred.(*expression.ScalarFunction); ok {
+			// in case of having, predicate columns should all be group by columns to be safely pushed down
+			predCols := expression.ExtractColumns(pred)
+			predCanPush := true
+			for _, predCol := range predCols {
+				isGroupByCol := false
+				for _, groupByCol := range la.groupByCols {
+					if predCol.UniqueID == groupByCol.UniqueID {
+						isGroupByCol = true
+						break
+					}
+				}
+				if !isGroupByCol {
+					predCanPush = false
+					break
+				}
+			}
+			if predCanPush {
+				canBePushed = append(canBePushed, pred)
+			} else {
+				canNotBePushed = append(canNotBePushed, pred)
+			}
+		}else {
+			canNotBePushed = append(canNotBePushed, pred)
+		}
+	}
+	ret, retPlan = la.baseLogicalPlan.PredicatePushDown(canBePushed)
+	return append(ret, canNotBePushed...), retPlan
 }
 
 // PredicatePushDown implements LogicalPlan PredicatePushDown interface.
