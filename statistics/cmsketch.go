@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tipb/go-tipb"
 	"github.com/spaolacci/murmur3"
+	"sort"
 )
 
 // CMSketch is used to estimate point queries.
@@ -50,6 +51,14 @@ func (c *CMSketch) InsertBytes(bytes []byte) {
 // insertBytesByCount adds the bytes value into the TopN (if value already in TopN) or CM Sketch by delta, this does not updates c.defaultValue.
 func (c *CMSketch) insertBytesByCount(bytes []byte, count uint64) {
 	// TODO: implement the insert method.
+	// https://www.eecs.harvard.edu/~michaelm/postscripts/tr-02-05.pdf
+	h1, h2 := murmur3.Sum128(bytes)
+	for i := int32(0); i < c.depth; i++ {
+		// use h1, h2 as multiple hash functions
+		h := h1 + uint64(i) * h2
+		c.table[i][h % uint64(c.width)] += uint32(count)
+	}
+	c.count += count
 }
 
 func (c *CMSketch) queryValue(sc *stmtctx.StatementContext, val types.Datum) (uint64, error) {
@@ -68,7 +77,23 @@ func (c *CMSketch) QueryBytes(d []byte) uint64 {
 
 func (c *CMSketch) queryHashValue(h1, h2 uint64) uint64 {
 	// TODO: implement the query method.
-	return uint64(0)
+	values := make([]uint32, 0, c.depth)
+	for i := int32(0); i < c.depth; i++ {
+		h := h1 + uint64(i) * h2
+		v := c.table[i][h % uint64(c.width)]
+		noise := (uint32(c.count) - v) / uint32(c.width - 1)
+		// values are unsigned integers
+		if v >= noise {
+			values = append(values, v - noise)
+		}else{
+			values = append(values, 0)
+		}
+	}
+	// sort to get the median
+	sort.Slice(values, func(i, j int) bool {
+		return values[i] < values[j]
+	})
+	return uint64(values[len(values) / 2])
 }
 
 // MergeCMSketch merges two CM Sketch.
