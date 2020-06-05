@@ -394,6 +394,12 @@ func (e *SelectionExec) Next(ctx context.Context, req *chunk.Chunk) error {
 		// Fill in the `req` util it is full or the `inputIter` is fully processed.
 		for ; e.inputRow != e.inputIter.End(); e.inputRow = e.inputIter.Next() {
 			// Your code here.
+			// check "1. the `req` chunk` is full."
+			if req.IsFull() {
+				return nil
+			}
+			// not full, append
+			req.AppendRow(e.inputRow)
 		}
 		err := Next(ctx, e.children[0], e.childResult)
 		if err != nil {
