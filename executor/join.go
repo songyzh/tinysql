@@ -153,7 +153,41 @@ func (e *HashJoinExec) fetchAndBuildHashTable(ctx context.Context) error {
 
 	// You'll need to store the hash table in `e.rowContainer`
 	// and you can call `newHashRowContainer` in `executor/hash_table.go` to build it.
-	// In this stage you can only assign value for `e.rowContainer` without changing any value of the `HashJoinExec`.
+	// In this stage you can only assign value for `e.rowContainer` without changing any other value of the `HashJoinExec`.
+
+	// new hashContext, build with inner side exec
+	innerFieldTypes := retTypes(e.innerSideExec)
+	keyColIdx := make([]int, 0, len(e.innerKeys))
+	for _, col := range e.innerKeys {
+		keyColIdx = append(keyColIdx, col.Index)
+	}
+	hCtx := &hashContext{
+		allTypes:  innerFieldTypes,
+		keyColIdx: keyColIdx,
+	}
+	// new chunk list, build with inner side exec
+	initList := chunk.NewList(innerFieldTypes, e.innerSideExec.base().initCap, e.innerSideExec.base().maxChunkSize)
+	// new hashtable
+	rowContainer := newHashRowContainer(e.ctx, int(e.innerSideEstCount), hCtx, initList)
+	// get chunks by calling Next()
+	for{
+		chk := chunk.NewChunkWithCapacity(innerFieldTypes, e.innerSideExec.base().maxChunkSize)
+		err := Next(ctx, e.innerSideExec, chk)
+		if err != nil {
+			return err
+		}
+		// all rows fetched
+		if chk.NumRows() == 0 {
+			break
+		}
+		// put chunk
+		initList.Add(chk)
+		err = rowContainer.PutChunk(chk)
+		if err != nil {
+			return err
+		}
+	}
+	e.rowContainer = rowContainer
 	return nil
 }
 
@@ -248,7 +282,7 @@ func (e *HashJoinExec) runJoinWorker(workerID uint, outerKeyColIdx []int) {
 	// and put the `joinResult` into the channel `e.joinResultCh`.
 
 	// You may pay attention to:
-	// 
+	//
 	// - e.closeCh, this is a channel tells that the join can be terminated as soon as possible.
 }
 
