@@ -15,6 +15,7 @@ package executor
 
 import (
 	"context"
+	"github.com/spaolacci/murmur3"
 	"sync"
 
 	"github.com/cznic/mathutil"
@@ -32,12 +33,15 @@ import (
 	"go.uber.org/zap"
 )
 
+// hashtable
 type aggPartialResultMapper map[string][]aggfuncs.PartialResult
 
 // baseHashAggWorker stores the common attributes of HashAggFinalWorker and HashAggPartialWorker.
+// baseWorker
 type baseHashAggWorker struct {
 	ctx          sessionctx.Context
 	finishCh     <-chan struct{}
+	// partial worker and final worker use different funcs
 	aggFuncs     []aggfuncs.AggFunc
 	maxChunkSize int
 }
@@ -55,11 +59,15 @@ func newBaseHashAggWorker(ctx sessionctx.Context, finishCh <-chan struct{}, aggF
 // the number of the worker can be set by `tidb_hashagg_partial_concurrency`.
 type HashAggPartialWorker struct {
 	baseHashAggWorker
-
+	// transfer input data
 	inputCh           chan *chunk.Chunk
+	// output intermediate data to multiple final workers
 	outputChs         []chan *HashAggIntermData
+	// global final result
 	globalOutputCh    chan *AfFinalResult
+	// for reuse
 	giveBackCh        chan<- *HashAggInput
+	// hashtable
 	partialResultsMap aggPartialResultMapper
 	groupByItems      []expression.Expression
 	groupKey          [][]byte
@@ -75,9 +83,12 @@ type HashAggFinalWorker struct {
 
 	rowBuffer           []types.Datum
 	mutableRow          chunk.MutRow
+	// hashtable
 	partialResultMap    aggPartialResultMapper
 	groupSet            set.StringSet
+	// receive intermediate data from partial worker
 	inputCh             chan *HashAggIntermData
+	// to global final result
 	outputCh            chan *AfFinalResult
 	finalResultHolderCh chan *chunk.Chunk
 	groupKeys           [][]byte
@@ -139,10 +150,15 @@ type HashAggExec struct {
 	FinalAggFuncs   []aggfuncs.AggFunc
 	GroupByItems    []expression.Expression
 
+	// done channel
 	finishCh         chan struct{}
+	// for final result
 	finalOutputCh    chan *AfFinalResult
+	// each partial worker sends intermediate data to
 	partialOutputChs []chan *HashAggIntermData
+	// receive input data
 	inputCh          chan *HashAggInput
+	// each partial worker gets input from
 	partialInputChs  []chan *chunk.Chunk
 	partialWorkers   []HashAggPartialWorker
 	finalWorkers     []HashAggFinalWorker
@@ -165,6 +181,7 @@ type HashAggInput struct {
 
 // HashAggIntermData indicates the intermediate data of aggregation execution.
 type HashAggIntermData struct {
+	// group by column values
 	groupKeys        []string
 	cursor           int
 	partialResultMap aggPartialResultMapper
@@ -224,19 +241,23 @@ func (e *HashAggExec) Open(ctx context.Context) error {
 
 func (e *HashAggExec) initForParallelExec(ctx sessionctx.Context) {
 	sessionVars := e.ctx.GetSessionVars()
+	// get worker goroutine num
 	finalConcurrency := sessionVars.HashAggFinalConcurrency
 	partialConcurrency := sessionVars.HashAggPartialConcurrency
 	e.isChildReturnEmpty = true
 	e.finalOutputCh = make(chan *AfFinalResult, finalConcurrency)
 	e.inputCh = make(chan *HashAggInput, partialConcurrency)
+	// done
 	e.finishCh = make(chan struct{}, 1)
 
 	e.partialInputChs = make([]chan *chunk.Chunk, partialConcurrency)
 	for i := range e.partialInputChs {
+		// input 1 chunk
 		e.partialInputChs[i] = make(chan *chunk.Chunk, 1)
 	}
 	e.partialOutputChs = make([]chan *HashAggIntermData, finalConcurrency)
 	for i := range e.partialOutputChs {
+		// may get inputs from all partial workers, in which case buffered size is partialConcurrency
 		e.partialOutputChs[i] = make(chan *HashAggIntermData, partialConcurrency)
 	}
 
@@ -249,6 +270,7 @@ func (e *HashAggExec) initForParallelExec(ctx sessionctx.Context) {
 			baseHashAggWorker: newBaseHashAggWorker(e.ctx, e.finishCh, e.PartialAggFuncs, e.maxChunkSize),
 			inputCh:           e.partialInputChs[i],
 			outputChs:         e.partialOutputChs,
+			// reuse input channel
 			giveBackCh:        e.inputCh,
 			globalOutputCh:    e.finalOutputCh,
 			partialResultsMap: make(aggPartialResultMapper),
@@ -281,6 +303,7 @@ func (e *HashAggExec) initForParallelExec(ctx sessionctx.Context) {
 	}
 }
 
+// get new input to partial worker
 func (w *HashAggPartialWorker) getChildInput() bool {
 	select {
 	case <-w.finishCh:
@@ -319,6 +342,7 @@ func (w *HashAggPartialWorker) run(ctx sessionctx.Context, waitGroup *sync.WaitG
 		if !w.getChildInput() {
 			return
 		}
+		// input chunk to partial result
 		if err := w.updatePartialResult(ctx, sc, w.chk, len(w.partialResultsMap)); err != nil {
 			w.globalOutputCh <- &AfFinalResult{err: err}
 			return
@@ -334,13 +358,17 @@ func (w *HashAggPartialWorker) updatePartialResult(ctx sessionctx.Context, sc *s
 	if err != nil {
 		return err
 	}
-
+	// existing partial result
 	partialResults := w.getPartialResult(sc, w.groupKey, w.partialResultsMap)
 	numRows := chk.NumRows()
+	// set size to 1
 	rows := make([]chunk.Row, 1)
 	for i := 0; i < numRows; i++ {
+		// put row to every aggFuncs
 		for j, af := range w.aggFuncs {
+			// get current row
 			rows[0] = chk.GetRow(i)
+			// update with current row
 			if err = af.UpdatePartialResult(ctx, rows, partialResults[i][j]); err != nil {
 				return err
 			}
@@ -353,6 +381,27 @@ func (w *HashAggPartialWorker) updatePartialResult(ctx sessionctx.Context, sc *s
 // We only support parallel execution for single-machine, so process of encode and decode can be skipped.
 func (w *HashAggPartialWorker) shuffleIntermData(sc *stmtctx.StatementContext, finalConcurrency int) {
 	// TODO: implement the method body. Shuffle the data to final workers.
+	// get all intermediate data
+	intermediateData := w.partialResultsMap
+	// decide which keys go to which final worker
+	destKeysMap := make(map[int][]string, finalConcurrency)
+	for key := range intermediateData {
+		h1, _ := murmur3.Sum128([]byte(key))
+		dest := int(h1 % uint64(finalConcurrency))
+		_, exists := destKeysMap[dest]
+		if exists {
+			destKeysMap[dest] = append(destKeysMap[dest], key)
+		}else {
+			destKeysMap[dest] = []string{key}
+		}
+	}
+	// send data to final worker
+	for dest, keys := range destKeysMap {
+		w.outputChs[dest] <- &HashAggIntermData {
+			groupKeys: keys,
+			partialResultMap: intermediateData,
+		}
+	}
 }
 
 // getGroupKey evaluates the group items and args of aggregate functions.
