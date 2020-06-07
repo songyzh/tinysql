@@ -75,6 +75,8 @@ func DecodeRecordKey(key kv.Key) (tableID int64, handle int64, err error) {
 	// key structure: t{tableId8}_r{handle8}
 	// check key length
 	if len(key) != RecordRowKeyLen{
+		// this line would cause proj3 ddl test infinite loop
+		// so plz comment out this line when running proj3 ddl test
 		err = errors.New("wrong key length")
 		return
 	}
