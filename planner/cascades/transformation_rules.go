@@ -501,19 +501,27 @@ func (r *PushSelDownAggregation) OnTransform(old *memo.ExprIter) (newExprs []*me
 	canBePushed := make([]expression.Expression, 0, len(sel.Conditions))
 	canNotBePushed := make([]expression.Expression, 0, len(sel.Conditions))
 	for _, pred := range sel.Conditions {
+		// check whether scalar function can be pushed down
 		if pred, ok := pred.(*expression.ScalarFunction); ok {
 			// in case of having, predicate columns should all be group by columns to be safely pushed down
+			// extract all pred columns
 			predCols := expression.ExtractColumns(pred)
+			// assume this pred can be pushed down
 			predCanPush := true
+			// for each pred column
 			for _, predCol := range predCols {
+				// assume this column is not group by column
 				isGroupByCol := false
 				for _, groupByCol := range agg.GetGroupByCols() {
 					if predCol.UniqueID == groupByCol.UniqueID {
+						// this pred column is group by column, break
 						isGroupByCol = true
 						break
 					}
 				}
 				if !isGroupByCol {
+					// if one pred column isn't group by column
+					// this pred can't be pushed down
 					predCanPush = false
 					break
 				}
