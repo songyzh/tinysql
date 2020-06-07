@@ -75,13 +75,25 @@ func DecodeRecordKey(key kv.Key) (tableID int64, handle int64, err error) {
 	// key structure: t{tableId8}_r{handle8}
 	// check key length
 	if len(key) != RecordRowKeyLen{
-		//err = errors.New("wrong key length")
+		err = errors.New("wrong key length")
+		return
+	}
+	// check table prefix
+	tPrefix := key[:tablePrefixLength]
+	if string(tPrefix) != string(tablePrefix){
+		err = errors.New("wrong table prefix")
 		return
 	}
 	// decode tableID
 	tableIDBytes := key[tablePrefixLength:tablePrefixLength + idLen]
 	_, tableID, err = codec.DecodeInt(tableIDBytes)
 	if err != nil {
+		return
+	}
+	// check record prefix
+	rPrefix := key[tablePrefixLength + idLen:tablePrefixLength + idLen + recordPrefixSepLength]
+	if string(rPrefix) != string(recordPrefixSep){
+		err = errors.New("wrong record prefix")
 		return
 	}
 	// decode handle
@@ -117,13 +129,25 @@ func DecodeIndexKeyPrefix(key kv.Key) (tableID int64, indexID int64, indexValues
 	// key structure: t{tableID8}_i{idxID8}{indexValues}
 	// check length
 	if len(key) < RecordRowKeyLen{
-		//err = errors.New("wrong key length")
+		err = errors.New("wrong key length")
+		return
+	}
+	// check table prefix
+	tPrefix := key[:tablePrefixLength]
+	if string(tPrefix) != string(tablePrefix){
+		err = errors.New("wrong table prefix")
 		return
 	}
 	// decode tableID
 	tableIDBytes := key[tablePrefixLength:tablePrefixLength + idLen]
 	_, tableID, err = codec.DecodeInt(tableIDBytes)
 	if err != nil {
+		return
+	}
+	// check index prefix
+	iPrefix := key[tablePrefixLength + idLen:tablePrefixLength + idLen + recordPrefixSepLength]
+	if string(iPrefix) != string(indexPrefixSep){
+		err = errors.New("wrong index prefix")
 		return
 	}
 	// decode indexID
