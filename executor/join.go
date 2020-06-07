@@ -230,6 +230,7 @@ func (e *HashJoinExec) fetchOuterSideChunks(ctx context.Context) {
 		var outerSideResource *outerChkResource
 		var ok bool
 		select {
+		// check done
 		case <-e.closeCh:
 			return
 		case outerSideResource, ok = <-e.outerChkResourceCh:
@@ -238,6 +239,7 @@ func (e *HashJoinExec) fetchOuterSideChunks(ctx context.Context) {
 			}
 		}
 		outerSideResult := outerSideResource.chk
+		// reuse chunk
 		err := Next(ctx, e.outerSideExec, outerSideResult)
 		if err != nil {
 			e.joinResultCh <- &hashjoinWorkerResult{
@@ -249,7 +251,7 @@ func (e *HashJoinExec) fetchOuterSideChunks(ctx context.Context) {
 		if outerSideResult.NumRows() == 0 {
 			return
 		}
-
+		// send chunk to dest
 		outerSideResource.dest <- outerSideResult
 	}
 }
@@ -268,6 +270,7 @@ func (e *HashJoinExec) fetchAndProbeHashTable(ctx context.Context) {
 	// outer side rows.
 	for i := uint(0); i < e.concurrency; i++ {
 		e.joinWorkerWaitGroup.Add(1)
+		// redeclare to avoid all i is the last one, as they're used in new goroutines
 		workID := i
 		go util.WithRecovery(func() { e.runJoinWorker(workID, outerKeyColIdx) }, e.handleJoinWorkerPanic)
 	}
@@ -284,6 +287,48 @@ func (e *HashJoinExec) runJoinWorker(workerID uint, outerKeyColIdx []int) {
 	// You may pay attention to:
 	//
 	// - e.closeCh, this is a channel tells that the join can be terminated as soon as possible.
+
+	// get outerResult chunk
+	var outerResult *chunk.Chunk
+	var ok bool
+	select {
+	case <- e.closeCh:
+		return
+	case outerResult, ok = <- e.outerResultChs[workerID]:
+		if !ok {
+			return
+		}
+	}
+	// get joinChkResource chunk
+	var joinChkResource *chunk.Chunk
+	select {
+	case <- e.closeCh:
+		return
+	case joinChkResource, ok = <- e.joinChkResourceCh[workerID]:
+		if !ok {
+			return
+		}
+	}
+	// get join result
+	hCtx := &hashContext{
+		allTypes: retTypes(e.outerSideExec),
+		keyColIdx: outerKeyColIdx,
+	}
+	joinResult := &hashjoinWorkerResult{
+		chk: joinChkResource,
+		src: e.joinChkResourceCh[workerID],
+	}
+	ok, _ = e.join2Chunk(workerID, outerResult, hCtx, joinResult, make([]bool, 0, outerResult.Capacity()))
+	if !ok {
+		return
+	}
+	// both channels are buffered
+	e.outerChkResourceCh <- &outerChkResource{
+		chk: outerResult,
+		dest: e.outerResultChs[workerID],
+	}
+	e.joinResultCh <- joinResult
+
 }
 
 func (e *HashJoinExec) getNewJoinResult(workerID uint) (bool, *hashjoinWorkerResult) {
