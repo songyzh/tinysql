@@ -80,7 +80,7 @@ func DecodeRecordKey(key kv.Key) (tableID int64, handle int64, err error) {
 		//     and (proj4 part2 cmsketch_test.go)
 		//     and (proj5 executor_test)
 		// infinite loop
-		// so plz comment out this line when running proj3 and proj4
+		// so plz comment out this line when running proj3, proj4 and proj5
 		err = errors.New("wrong key length")
 		return
 	}
