@@ -412,6 +412,10 @@ func (e *SelectionExec) Next(ctx context.Context, req *chunk.Chunk) error {
 		/* Your code here.
 		   Process and filter the child result using `expression.VectorizedFilter`.
 		 */
+		e.selected, err = expression.VectorizedFilter(e.ctx, e.filters, e.inputIter, e.selected)
+		if err != nil {
+			return err
+		}
 	}
 }
 
