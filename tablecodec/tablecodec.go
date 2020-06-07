@@ -75,7 +75,11 @@ func DecodeRecordKey(key kv.Key) (tableID int64, handle int64, err error) {
 	// key structure: t{tableId8}_r{handle8}
 	// check key length
 	if len(key) != RecordRowKeyLen{
-		// this line would cause (proj3 ddl test) and (proj4 part2 cmsketch_test.go) infinite loop
+		// this line would cause
+		//     (proj3 ddl test)
+		//     and (proj4 part2 cmsketch_test.go)
+		//     and (proj5 executor_test)
+		// infinite loop
 		// so plz comment out this line when running proj3 and proj4
 		err = errors.New("wrong key length")
 		return

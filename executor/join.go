@@ -292,6 +292,7 @@ func (e *HashJoinExec) runJoinWorker(workerID uint, outerKeyColIdx []int) {
 	var outerResult *chunk.Chunk
 	var ok bool
 	select {
+	// check channel closed
 	case <- e.closeCh:
 		return
 	case outerResult, ok = <- e.outerResultChs[workerID]:
@@ -302,6 +303,7 @@ func (e *HashJoinExec) runJoinWorker(workerID uint, outerKeyColIdx []int) {
 	// get joinChkResource chunk
 	var joinChkResource *chunk.Chunk
 	select {
+	// check channel closed
 	case <- e.closeCh:
 		return
 	case joinChkResource, ok = <- e.joinChkResourceCh[workerID]:
