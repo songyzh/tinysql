@@ -547,8 +547,7 @@ func (r *PushSelDownAggregation) OnTransform(old *memo.ExprIter) (newExprs []*me
 	pushedSelPlan := plannercore.LogicalSelection{Conditions: canBePushed}.Init(sel.SCtx())
 	pushedSelGroupExpr := memo.NewGroupExpr(pushedSelPlan)
 	pushedSelGroupExpr.SetChildren(xGroup)
-	// new sel group's schema comes from agg.
-	// in original condition, x group's schema comes from agg
+	// new sel's schema is the same with x, as sel won't change schema
 	pushedSelGroup := memo.NewGroupWithSchema(pushedSelGroupExpr, xGroup.Prop.Schema)
 
 	aggGroupExpr := memo.NewGroupExpr(agg)
