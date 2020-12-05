@@ -3816,10 +3816,10 @@ JoinTable:
 		$$ = &ast.Join{Left: $1.(ast.ResultSetNode), Right: $3.(ast.ResultSetNode), Tp: ast.CrossJoin, On: &ast.OnCondition{Expr: $5.(ast.ExprNode)}}
 	}
 	/* outer join */
-|   TableRef JoinType OuterOpt CrossOpt TableRef "ON" Expression
-    {
-        $$ = &ast.Join{Left: $1.(ast.ResultSetNode), Right: $5.(ast.ResultSetNode), Tp: $2.(ast.JoinType), On: &ast.OnCondition{Expr: $7.(ast.ExprNode)}}
-    }
+|       TableRef JoinType OuterOpt CrossOpt TableRef "ON" Expression
+        {
+                $$ = &ast.Join{Left: $1.(ast.ResultSetNode), Right: $5.(ast.ResultSetNode), Tp: $2.(ast.JoinType), On: &ast.OnCondition{Expr: $7.(ast.ExprNode)}}
+        }
 
 JoinType:
 	"LEFT"
