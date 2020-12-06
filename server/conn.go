@@ -538,6 +538,7 @@ func (cc *clientConn) PeerHost(hasPassword string) (host string, err error) {
 // Run reads client query and writes query result to client in for loop, if there is a panic during query handling,
 // it will be recovered and log the panic error.
 // This function returns and the connection is closed if there is an IO error or there is a panic.
+// share 协议层入口
 func (cc *clientConn) Run(ctx context.Context) {
 	const size = 4096
 	defer func() {
@@ -573,6 +574,7 @@ func (cc *clientConn) Run(ctx context.Context) {
 		waitTimeout := cc.getSessionVarsWaitTimeout(ctx)
 		cc.pkt.setReadTimeout(time.Duration(waitTimeout) * time.Second)
 		start := time.Now()
+		// share 读取网络包
 		data, err := cc.readPacket()
 		if err != nil {
 			if terror.ErrorNotEqual(err, io.EOF) {
@@ -597,7 +599,7 @@ func (cc *clientConn) Run(ctx context.Context) {
 		if !atomic.CompareAndSwapInt32(&cc.status, connStatusReading, connStatusDispatching) {
 			return
 		}
-
+		// share 分发请求
 		if err = cc.dispatch(ctx, data); err != nil {
 			if terror.ErrorEqual(err, io.EOF) {
 
@@ -819,6 +821,7 @@ func (cc *clientConn) writeEOF(serverStatus uint16) error {
 
 // handleQuery executes the sql query string and writes result set or result ok to the client.
 func (cc *clientConn) handleQuery(ctx context.Context, sql string) (err error) {
+	// share 返回resultSet
 	rss, err := cc.ctx.Execute(ctx, sql)
 	if err != nil {
 
@@ -832,6 +835,7 @@ func (cc *clientConn) handleQuery(ctx context.Context, sql string) (err error) {
 		return executor.ErrQueryInterrupted
 	}
 	if rss != nil {
+		// share 协议层出口
 		if len(rss) == 1 {
 			err = cc.writeResultset(ctx, rss[0], false, 0, 0)
 		} else {
