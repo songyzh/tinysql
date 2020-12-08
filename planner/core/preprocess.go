@@ -39,6 +39,8 @@ func Preprocess(ctx sessionctx.Context, node ast.Node, is infoschema.InfoSchema,
 	for _, optFn := range preprocessOpt {
 		optFn(&v)
 	}
+	// share visitor模式(accept, enter, leave)
+	// v是一个preprocessor的引用
 	node.Accept(&v)
 	return errors.Trace(v.err)
 }
@@ -67,6 +69,7 @@ type preprocessor struct {
 
 func (p *preprocessor) Enter(in ast.Node) (out ast.Node, skipChildren bool) {
 	switch node := in.(type) {
+	// share 建表语句的预处理
 	case *ast.CreateTableStmt:
 		p.flag |= inCreateOrDropTable
 		p.checkCreateTableGrammar(node)
@@ -211,6 +214,7 @@ func (p *preprocessor) checkDropDatabaseGrammar(stmt *ast.DropDatabaseStmt) {
 	}
 }
 
+// 建表语句的预处理
 func (p *preprocessor) checkCreateTableGrammar(stmt *ast.CreateTableStmt) {
 	tName := stmt.Table.Name.String()
 	if isIncorrectName(tName) {

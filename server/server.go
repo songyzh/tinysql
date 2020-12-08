@@ -159,6 +159,7 @@ func (s *Server) Run() error {
 		s.startStatusHTTP()
 	}
 	for {
+		// share 连接建立逻辑
 		conn, err := s.listener.Accept()
 		if err != nil {
 			if opErr, ok := err.(*net.OpError); ok {
@@ -177,7 +178,7 @@ func (s *Server) Run() error {
 		}
 
 		clientConn := s.newConn(conn)
-
+		// share 连接建立逻辑
 		go s.onConn(clientConn)
 	}
 	err := s.listener.Close()

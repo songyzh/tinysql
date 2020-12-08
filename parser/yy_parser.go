@@ -116,6 +116,7 @@ func New() *Parser {
 	}
 }
 
+// share parse sql为ast.StmtNode
 // Parse parses a query string to raw ast.StmtNode.
 // If charset or collation is "", default charset and collation will be used.
 func (parser *Parser) Parse(sql, charset, collation string) (stmt []ast.StmtNode, warns []error, err error) {

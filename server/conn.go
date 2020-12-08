@@ -574,7 +574,7 @@ func (cc *clientConn) Run(ctx context.Context) {
 		waitTimeout := cc.getSessionVarsWaitTimeout(ctx)
 		cc.pkt.setReadTimeout(time.Duration(waitTimeout) * time.Second)
 		start := time.Now()
-		// share 读取网络包
+		// share tidb的入口, 不断读取client发来的包
 		data, err := cc.readPacket()
 		if err != nil {
 			if terror.ErrorNotEqual(err, io.EOF) {
@@ -599,7 +599,7 @@ func (cc *clientConn) Run(ctx context.Context) {
 		if !atomic.CompareAndSwapInt32(&cc.status, connStatusReading, connStatusDispatching) {
 			return
 		}
-		// share 分发请求
+		// share 分发给处理函数
 		if err = cc.dispatch(ctx, data); err != nil {
 			if terror.ErrorEqual(err, io.EOF) {
 
@@ -668,6 +668,10 @@ func errStrForLog(err error) string {
 // The most frequently used command is ComQuery.
 func (cc *clientConn) dispatch(ctx context.Context, data []byte) error {
 	cc.lastPacket = data
+	// share data为byte数组, 遵循mysql协议, 第一个 byte 即为 Command 的类型
+	// https://dev.mysql.com/doc/internals/en/client-server-protocol.html
+	// https://dev.mysql.com/doc/internals/en/command-phase.html
+	// 最常用的是 COM_QUERY
 	cmd := data[0]
 	data = data[1:]
 	vars := cc.ctx.GetSessionVars()
@@ -695,6 +699,7 @@ func (cc *clientConn) dispatch(ctx context.Context, data []byte) error {
 			data = data[:len(data)-1]
 			dataStr = string(hack.String(data))
 		}
+		// share 处理query
 		return cc.handleQuery(ctx, dataStr)
 	case mysql.ComPing:
 		return cc.writeOK()
@@ -819,9 +824,10 @@ func (cc *clientConn) writeEOF(serverStatus uint16) error {
 	return err
 }
 
+// share 处理query
 // handleQuery executes the sql query string and writes result set or result ok to the client.
 func (cc *clientConn) handleQuery(ctx context.Context, sql string) (err error) {
-	// share 返回resultSet
+	// share 执行sql, 得到结果
 	rss, err := cc.ctx.Execute(ctx, sql)
 	if err != nil {
 

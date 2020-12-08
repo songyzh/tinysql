@@ -31,6 +31,7 @@ type Compiler struct {
 // Compile compiles an ast.StmtNode to a physical plan.
 func (c *Compiler) Compile(ctx context.Context, stmtNode ast.StmtNode) (*ExecStmt, error) {
 	infoSchema := infoschema.GetInfoSchema(c.Ctx)
+	// share 对stmtNode进行预处理
 	if err := plannercore.Preprocess(c.Ctx, stmtNode, infoSchema); err != nil {
 		return nil, err
 	}
