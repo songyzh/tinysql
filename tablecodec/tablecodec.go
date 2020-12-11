@@ -74,6 +74,7 @@ func DecodeRecordKey(key kv.Key) (tableID int64, handle int64, err error) {
 	/* Your code here */
 	// key structure: t{tableId8}_r{handle8}
 	// check key length
+	// 对key进行解码, 得到tableID, recordID
 	if len(key) != RecordRowKeyLen{
 		// this line would cause
 		//     (proj3 ddl test)

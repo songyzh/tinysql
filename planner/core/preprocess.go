@@ -68,6 +68,7 @@ type preprocessor struct {
 }
 
 func (p *preprocessor) Enter(in ast.Node) (out ast.Node, skipChildren bool) {
+	fmt.Printf("nodeType: %T\n", in)
 	switch node := in.(type) {
 	// share 建表语句的预处理
 	case *ast.CreateTableStmt:

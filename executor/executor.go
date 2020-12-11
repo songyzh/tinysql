@@ -146,6 +146,7 @@ func newBaseExecutor(ctx sessionctx.Context, schema *expression.Schema, id fmt.S
 // NOTE: Executors must call "chk.Reset()" before appending their results to it.
 type Executor interface {
 	base() *baseExecutor
+	// share 火山模型
 	Open(context.Context) error
 	Next(ctx context.Context, req *chunk.Chunk) error
 	Close() error

@@ -453,6 +453,7 @@ func (e *AnalyzeColumnsExec) buildStats(ranges []*ranger.Range) (hists []*statis
 				return nil, nil, err
 			}
 		}
+		// 桶的数量是预定义的
 		hg, err := statistics.BuildColumn(e.ctx, int64(defaultNumBuckets), col.ID, collectors[i], &col.FieldType)
 		if err != nil {
 			return nil, nil, err
@@ -464,6 +465,7 @@ func (e *AnalyzeColumnsExec) buildStats(ranges []*ranger.Range) (hists []*statis
 }
 
 // analyzeResult is used to represent analyze result.
+// analyze 统计到的信息
 type analyzeResult struct {
 	// PhysicalTableID is the id of a partition or a table.
 	PhysicalTableID int64

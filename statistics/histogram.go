@@ -36,8 +36,11 @@ import (
 
 // Histogram represents statistics for a column or index.
 type Histogram struct {
+	// 列id
 	ID        int64 // Column ID.
+	// 不重复的值得计数
 	NDV       int64 // Number of distinct values.
+	// null值计数
 	NullCount int64 // Number of null values.
 	// LastUpdateVersion is the version that this histogram updated last time.
 	LastUpdateVersion uint64
@@ -53,7 +56,9 @@ type Histogram struct {
 	// Bucket counts are always in increasing order.
 	//
 	// A bucket repeat is the number of repeats of the bucket value, it can be used to find popular values.
+	// 各个桶的上下界
 	Bounds  *chunk.Chunk
+	// 各个桶
 	Buckets []Bucket
 
 	// Used for estimating fraction of the interval [lower, upper] that lies within the [lower, value].
@@ -65,6 +70,7 @@ type Histogram struct {
 
 // Bucket store the bucket count and repeat.
 type Bucket struct {
+	// 之前的桶和当前桶的元素计数, 递增
 	Count  int64
 	Repeat int64
 }

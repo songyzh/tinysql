@@ -177,6 +177,7 @@ func (a *ExecStmt) Exec(ctx context.Context) (_ sqlexec.RecordSet, err error) {
 	}()
 
 	sctx := a.Ctx
+	// share 生成执行器
 	e, err := a.buildExecutor()
 	if err != nil {
 		return nil, err
@@ -223,7 +224,7 @@ func (a *ExecStmt) handleNoDelayExecutor(ctx context.Context, e Executor) (sqlex
 	defer func() {
 		terror.Log(e.Close())
 	}()
-
+	// share
 	err = Next(ctx, e, newFirstChunk(e))
 	if err != nil {
 		return nil, err
@@ -236,6 +237,7 @@ func (a *ExecStmt) buildExecutor() (Executor, error) {
 	ctx := a.Ctx
 
 	b := newExecutorBuilder(ctx, a.InfoSchema)
+	// share 根据执行计划, 构建执行器
 	e := b.build(a.Plan)
 	if b.err != nil {
 		return nil, errors.Trace(b.err)

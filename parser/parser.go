@@ -8123,6 +8123,7 @@ yynewstate:
 		{
 			parser.yyVAL.item = yyS[yypt-0].item
 		}
+	// share parser.y jointable部分生成的代码
 	case 872:
 		{
 			parser.yyVAL.item = &ast.Join{Left: yyS[yypt-2].item.(ast.ResultSetNode), Right: yyS[yypt-0].item.(ast.ResultSetNode), Tp: ast.CrossJoin}

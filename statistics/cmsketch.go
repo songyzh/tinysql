@@ -56,6 +56,7 @@ func (c *CMSketch) insertBytesByCount(bytes []byte, count uint64) {
 	for i := int32(0); i < c.depth; i++ {
 		// use h1, h2 as multiple hash functions
 		h := h1 + uint64(i) * h2
+		// 更新count
 		c.table[i][h % uint64(c.width)] += uint32(count)
 	}
 	c.count += count
@@ -80,9 +81,11 @@ func (c *CMSketch) queryHashValue(h1, h2 uint64) uint64 {
 	// store values from each row
 	values := make([]uint32, 0, c.depth)
 	for i := int32(0); i < c.depth; i++ {
+		// 与插入时同样的hash计算方式
 		h := h1 + uint64(i) * h2
+		// 获取目标下表的值
 		v := c.table[i][h % uint64(c.width)]
-		// noise from other columns
+		// 计算其他列的噪音
 		noise := (uint32(c.count) - v) / uint32(c.width - 1)
 		// values are unsigned integers
 		if v >= noise {
