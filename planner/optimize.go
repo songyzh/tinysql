@@ -33,6 +33,7 @@ func Optimize(ctx context.Context, sctx sessionctx.Context, node ast.Node, is in
 	sctx.GetSessionVars().PlanID = 0
 	sctx.GetSessionVars().PlanColumnID = 0
 	builder := plannercore.NewPlanBuilder(sctx, is)
+	// share 把node构建成逻辑执行计划
 	p, err := builder.Build(ctx, node)
 	if err != nil {
 		return nil, nil, err

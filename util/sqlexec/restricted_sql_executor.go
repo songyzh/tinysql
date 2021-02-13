@@ -69,6 +69,7 @@ type Statement interface {
 	IsReadOnly() bool
 }
 
+// share RecordSet接口
 // RecordSet is an abstract result set interface to help get data from Plan.
 type RecordSet interface {
 	// Fields gets result fields.

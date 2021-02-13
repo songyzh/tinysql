@@ -353,6 +353,7 @@ type CreateTableStmt struct {
 	Constraints []*Constraint
 }
 
+// share 建表语句的预处理
 // Accept implements Node Accept interface.
 func (n *CreateTableStmt) Accept(v Visitor) (Node, bool) {
 	newNode, skipChildren := v.Enter(n)
@@ -360,6 +361,7 @@ func (n *CreateTableStmt) Accept(v Visitor) (Node, bool) {
 		return v.Leave(newNode)
 	}
 	n = newNode.(*CreateTableStmt)
+	// share 表名的预处理
 	node, ok := n.Table.Accept(v)
 	if !ok {
 		return n, false

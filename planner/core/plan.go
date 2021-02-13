@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tipb/go-tipb"
 )
 
+// share plan接口
 // Plan is the description of an execution flow.
 // It is created from ast.Node first, then optimized by the optimizer,
 // finally used by the executor to create a Cursor which executes the statement.
@@ -73,6 +74,7 @@ func enforceProperty(p *property.PhysicalProperty, tsk task, ctx sessionctx.Cont
 	return sort.attach2Task(tsk)
 }
 
+// share LogicalPlan接口
 // LogicalPlan is a tree of logical operators.
 // We can do a lot of logical optimizations to it, like predicate pushdown and column pruning.
 type LogicalPlan interface {
@@ -126,6 +128,7 @@ type LogicalPlan interface {
 	SetChild(i int, child LogicalPlan)
 }
 
+// share PhysicalPlan接口
 // PhysicalPlan is a tree of the physical operators.
 type PhysicalPlan interface {
 	Plan

@@ -153,7 +153,41 @@ func (e *HashJoinExec) fetchAndBuildHashTable(ctx context.Context) error {
 
 	// You'll need to store the hash table in `e.rowContainer`
 	// and you can call `newHashRowContainer` in `executor/hash_table.go` to build it.
-	// In this stage you can only assign value for `e.rowContainer` without changing any value of the `HashJoinExec`.
+	// In this stage you can only assign value for `e.rowContainer` without changing any other value of the `HashJoinExec`.
+
+	// new hashContext, build with inner side exec
+	innerFieldTypes := retTypes(e.innerSideExec)
+	keyColIdx := make([]int, 0, len(e.innerKeys))
+	for _, col := range e.innerKeys {
+		keyColIdx = append(keyColIdx, col.Index)
+	}
+	hCtx := &hashContext{
+		allTypes:  innerFieldTypes,
+		keyColIdx: keyColIdx,
+	}
+	// new chunk list, build with inner side exec
+	initList := chunk.NewList(innerFieldTypes, e.innerSideExec.base().initCap, e.innerSideExec.base().maxChunkSize)
+	// new hashtable
+	rowContainer := newHashRowContainer(e.ctx, int(e.innerSideEstCount), hCtx, initList)
+	// get chunks by calling Next()
+	for{
+		chk := chunk.NewChunkWithCapacity(innerFieldTypes, e.innerSideExec.base().maxChunkSize)
+		err := Next(ctx, e.innerSideExec, chk)
+		if err != nil {
+			return err
+		}
+		// all rows fetched
+		if chk.NumRows() == 0 {
+			break
+		}
+		// put chunk
+		initList.Add(chk)
+		err = rowContainer.PutChunk(chk)
+		if err != nil {
+			return err
+		}
+	}
+	e.rowContainer = rowContainer
 	return nil
 }
 
@@ -196,6 +230,7 @@ func (e *HashJoinExec) fetchOuterSideChunks(ctx context.Context) {
 		var outerSideResource *outerChkResource
 		var ok bool
 		select {
+		// check done
 		case <-e.closeCh:
 			return
 		case outerSideResource, ok = <-e.outerChkResourceCh:
@@ -204,6 +239,7 @@ func (e *HashJoinExec) fetchOuterSideChunks(ctx context.Context) {
 			}
 		}
 		outerSideResult := outerSideResource.chk
+		// reuse chunk
 		err := Next(ctx, e.outerSideExec, outerSideResult)
 		if err != nil {
 			e.joinResultCh <- &hashjoinWorkerResult{
@@ -215,7 +251,7 @@ func (e *HashJoinExec) fetchOuterSideChunks(ctx context.Context) {
 		if outerSideResult.NumRows() == 0 {
 			return
 		}
-
+		// send chunk to dest
 		outerSideResource.dest <- outerSideResult
 	}
 }
@@ -234,6 +270,7 @@ func (e *HashJoinExec) fetchAndProbeHashTable(ctx context.Context) {
 	// outer side rows.
 	for i := uint(0); i < e.concurrency; i++ {
 		e.joinWorkerWaitGroup.Add(1)
+		// redeclare to avoid all i is the last one, as they're used in new goroutines
 		workID := i
 		go util.WithRecovery(func() { e.runJoinWorker(workID, outerKeyColIdx) }, e.handleJoinWorkerPanic)
 	}
@@ -248,8 +285,52 @@ func (e *HashJoinExec) runJoinWorker(workerID uint, outerKeyColIdx []int) {
 	// and put the `joinResult` into the channel `e.joinResultCh`.
 
 	// You may pay attention to:
-	// 
+	//
 	// - e.closeCh, this is a channel tells that the join can be terminated as soon as possible.
+
+	// get outerResult chunk
+	var outerResult *chunk.Chunk
+	var ok bool
+	select {
+	// check channel closed
+	case <- e.closeCh:
+		return
+	case outerResult, ok = <- e.outerResultChs[workerID]:
+		if !ok {
+			return
+		}
+	}
+	// get joinChkResource chunk
+	var joinChkResource *chunk.Chunk
+	select {
+	// check channel closed
+	case <- e.closeCh:
+		return
+	case joinChkResource, ok = <- e.joinChkResourceCh[workerID]:
+		if !ok {
+			return
+		}
+	}
+	// get join result
+	hCtx := &hashContext{
+		allTypes: retTypes(e.outerSideExec),
+		keyColIdx: outerKeyColIdx,
+	}
+	joinResult := &hashjoinWorkerResult{
+		chk: joinChkResource,
+		src: e.joinChkResourceCh[workerID],
+	}
+	ok, _ = e.join2Chunk(workerID, outerResult, hCtx, joinResult, make([]bool, 0, outerResult.Capacity()))
+	if !ok {
+		return
+	}
+	// both channels are buffered
+	e.outerChkResourceCh <- &outerChkResource{
+		chk: outerResult,
+		dest: e.outerResultChs[workerID],
+	}
+	e.joinResultCh <- joinResult
+
 }
 
 func (e *HashJoinExec) getNewJoinResult(workerID uint) (bool, *hashjoinWorkerResult) {

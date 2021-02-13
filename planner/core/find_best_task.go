@@ -212,7 +212,28 @@ type candidatePath struct {
 // and there exists one factor that `x` is better than `y`, then `x` is better than `y`.
 func compareCandidates(lhs, rhs *candidatePath) int {
 	// TODO: implement the content according to the header comment.
-	return 0
+	// if lhs is better than rhs, return 1, else return 0
+	isBetter := 0
+	// 1. set of columns
+	if !rhs.columnSet.SubsetOf(lhs.columnSet) {
+		return 0
+	}
+	if lhs.columnSet.Len() > rhs.columnSet.Len(){
+		isBetter = 1
+	}
+	// 2. matches the physical property
+	if !lhs.isMatchProp && rhs.isMatchProp{
+		return 0
+	}else if lhs.isMatchProp && !rhs.isMatchProp{
+		isBetter = 1
+	}
+	// 3. require a double scan
+	if !lhs.isSingleScan && rhs.isSingleScan{
+		return 0
+	}else if lhs.isSingleScan && !rhs.isSingleScan{
+		isBetter = 1
+	}
+	return isBetter
 }
 
 func (ds *DataSource) getTableCandidate(path *util.AccessPath, prop *property.PhysicalProperty) *candidatePath {
@@ -276,7 +297,19 @@ func (ds *DataSource) skylinePruning(prop *property.PhysicalProperty) []*candida
 		//       And use it to prune unnecessary paths.
 		candidates = append(candidates, currentCandidate)
 	}
-	return candidates
+	ret := make([]*candidatePath, 0, len(candidates))
+	outer:
+	for i := 0; i < len(candidates); i++ {
+		for j := 0; j < len(candidates); j++ {
+			// j is better than i, so skip i
+			if compareCandidates(candidates[j], candidates[i]) == 1 {
+				continue outer
+			}
+		}
+		// no others better than i, so insert i
+		ret = append(ret, candidates[i])
+	}
+	return ret
 }
 
 // findBestTask implements the PhysicalPlan interface.

@@ -39,7 +39,7 @@ var (
 const (
 	idLen     = 8
 	prefixLen = 1 + idLen /*tableID*/ + 2
-	// RecordRowKeyLen is public for calculating avgerage row size.
+	// RecordRowKeyLen is public for calculating average row size.
 	RecordRowKeyLen       = prefixLen + idLen /*handle*/
 	tablePrefixLength     = 1
 	recordPrefixSepLength = 2
@@ -72,6 +72,44 @@ func EncodeRowKeyWithHandle(tableID int64, handle int64) kv.Key {
 // DecodeRecordKey decodes the key and gets the tableID, handle.
 func DecodeRecordKey(key kv.Key) (tableID int64, handle int64, err error) {
 	/* Your code here */
+	// key structure: t{tableId8}_r{handle8}
+	// check key length
+	// 对key进行解码, 得到tableID, recordID
+	if len(key) != RecordRowKeyLen{
+		// this line would cause
+		//     (proj3 ddl test)
+		//     and (proj4 part2 cmsketch_test.go)
+		//     and (proj5 executor_test)
+		// infinite loop
+		// so plz comment out this line when running proj3, proj4 and proj5
+		err = errors.New("wrong key length")
+		return
+	}
+	// check table prefix
+	tPrefix := key[:tablePrefixLength]
+	if string(tPrefix) != string(tablePrefix){
+		err = errors.New("wrong table prefix")
+		return
+	}
+	// decode tableID
+	tableIDBytes := key[tablePrefixLength:tablePrefixLength + idLen]
+	_, tableID, err = codec.DecodeInt(tableIDBytes)
+	if err != nil {
+		return
+	}
+	// check record prefix
+	rPrefix := key[tablePrefixLength + idLen:tablePrefixLength + idLen + recordPrefixSepLength]
+	if string(rPrefix) != string(recordPrefixSep){
+		err = errors.New("wrong record prefix")
+		return
+	}
+	// decode handle
+	handleBytes := key[prefixLen:]
+	_, handle, err = codec.DecodeInt(handleBytes)
+	if err != nil {
+		return
+	}
+
 	return
 }
 
@@ -95,6 +133,39 @@ func EncodeIndexSeekKey(tableID int64, idxID int64, encodedValue []byte) kv.Key 
 // DecodeIndexKeyPrefix decodes the key and gets the tableID, indexID, indexValues.
 func DecodeIndexKeyPrefix(key kv.Key) (tableID int64, indexID int64, indexValues []byte, err error) {
 	/* Your code here */
+	// key structure: t{tableID8}_i{idxID8}{indexValues}
+	// check length
+	if len(key) < RecordRowKeyLen{
+		err = errors.New("wrong key length")
+		return
+	}
+	// check table prefix
+	tPrefix := key[:tablePrefixLength]
+	if string(tPrefix) != string(tablePrefix){
+		err = errors.New("wrong table prefix")
+		return
+	}
+	// decode tableID
+	tableIDBytes := key[tablePrefixLength:tablePrefixLength + idLen]
+	_, tableID, err = codec.DecodeInt(tableIDBytes)
+	if err != nil {
+		return
+	}
+	// check index prefix
+	iPrefix := key[tablePrefixLength + idLen:tablePrefixLength + idLen + recordPrefixSepLength]
+	if string(iPrefix) != string(indexPrefixSep){
+		err = errors.New("wrong index prefix")
+		return
+	}
+	// decode indexID
+	indexIDBytes := key[prefixLen:RecordRowKeyLen]
+	_, indexID, err = codec.DecodeInt(indexIDBytes)
+	if err != nil {
+		return
+	}
+	// extract indexValues
+	indexValues= key[RecordRowKeyLen:]
+
 	return tableID, indexID, indexValues, nil
 }
 

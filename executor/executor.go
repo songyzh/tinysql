@@ -133,6 +133,7 @@ func newBaseExecutor(ctx sessionctx.Context, schema *expression.Schema, id fmt.S
 	return e
 }
 
+// share Executor接口
 // Executor is the physical implementation of a algebra operator.
 //
 // In TiDB, all algebra operators are implemented as iterators, i.e., they
@@ -145,6 +146,7 @@ func newBaseExecutor(ctx sessionctx.Context, schema *expression.Schema, id fmt.S
 // NOTE: Executors must call "chk.Reset()" before appending their results to it.
 type Executor interface {
 	base() *baseExecutor
+	// share 火山模型
 	Open(context.Context) error
 	Next(ctx context.Context, req *chunk.Chunk) error
 	Close() error
@@ -394,6 +396,12 @@ func (e *SelectionExec) Next(ctx context.Context, req *chunk.Chunk) error {
 		// Fill in the `req` util it is full or the `inputIter` is fully processed.
 		for ; e.inputRow != e.inputIter.End(); e.inputRow = e.inputIter.Next() {
 			// Your code here.
+			// check "1. the `req` chunk` is full."
+			if req.IsFull() {
+				return nil
+			}
+			// not full, append
+			req.AppendRow(e.inputRow)
 		}
 		err := Next(ctx, e.children[0], e.childResult)
 		if err != nil {
@@ -406,6 +414,10 @@ func (e *SelectionExec) Next(ctx context.Context, req *chunk.Chunk) error {
 		/* Your code here.
 		   Process and filter the child result using `expression.VectorizedFilter`.
 		 */
+		e.selected, err = expression.VectorizedFilter(e.ctx, e.filters, e.inputIter, e.selected)
+		if err != nil {
+			return err
+		}
 	}
 }
 

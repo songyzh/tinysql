@@ -160,6 +160,7 @@ func (c *SampleCollector) collect(sc *stmtctx.StatementContext, d types.Datum) e
 	// The following code use types.CloneDatum(d) because d may have a deep reference
 	// to the underlying slice, GC can't free them which lead to memory leak eventually.
 	// TODO: Refactor the proto to avoid copying here.
+	// 蓄水池抽样逻辑
 	if len(c.Samples) < int(c.MaxSampleSize) {
 		newItem := &SampleItem{Value: types.CloneDatum(d)}
 		c.Samples = append(c.Samples, newItem)

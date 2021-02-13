@@ -495,7 +495,75 @@ func NewRulePushSelDownAggregation() Transformation {
 // or just keep the selection unchanged.
 func (r *PushSelDownAggregation) OnTransform(old *memo.ExprIter) (newExprs []*memo.GroupExpr, eraseOld bool, eraseAll bool, err error) {
 	// TODO: implement the algo according to the header comment.
-	return []*memo.GroupExpr{old.GetExpr()}, false, false, nil
+	sel := old.GetExpr().ExprNode.(*plannercore.LogicalSelection)
+	agg := old.Children[0].GetExpr().ExprNode.(*plannercore.LogicalAggregation)
+	// same logic with classic planner
+	canBePushed := make([]expression.Expression, 0, len(sel.Conditions))
+	canNotBePushed := make([]expression.Expression, 0, len(sel.Conditions))
+	for _, pred := range sel.Conditions {
+		// check whether scalar function can be pushed down
+		if pred, ok := pred.(*expression.ScalarFunction); ok {
+			// in case of having, predicate columns should all be group by columns to be safely pushed down
+			// extract all pred columns
+			predCols := expression.ExtractColumns(pred)
+			// assume this pred can be pushed down
+			predCanPush := true
+			// for each pred column
+			for _, predCol := range predCols {
+				// assume this column is not group by column
+				isGroupByCol := false
+				for _, groupByCol := range agg.GetGroupByCols() {
+					if predCol.UniqueID == groupByCol.UniqueID {
+						// this pred column is group by column, break
+						isGroupByCol = true
+						break
+					}
+				}
+				if !isGroupByCol {
+					// if one pred column isn't group by column
+					// this pred can't be pushed down
+					predCanPush = false
+					break
+				}
+			}
+			if predCanPush {
+				canBePushed = append(canBePushed, pred)
+			} else {
+				canNotBePushed = append(canNotBePushed, pred)
+			}
+		}else {
+			canNotBePushed = append(canNotBePushed, pred)
+		}
+	}
+
+	// case0: keep the selection unchanged
+	if len(canBePushed) == 0 {
+		return nil, false, false, nil
+	}
+
+	// case1: agg->sel->x
+	xGroup := old.Children[0].GetExpr().Children[0]
+
+	pushedSelPlan := plannercore.LogicalSelection{Conditions: canBePushed}.Init(sel.SCtx())
+	pushedSelGroupExpr := memo.NewGroupExpr(pushedSelPlan)
+	pushedSelGroupExpr.SetChildren(xGroup)
+	// new sel's schema is the same with x, as sel won't change schema
+	pushedSelGroup := memo.NewGroupWithSchema(pushedSelGroupExpr, xGroup.Prop.Schema)
+
+	aggGroupExpr := memo.NewGroupExpr(agg)
+	aggGroupExpr.SetChildren(pushedSelGroup)
+
+	if len(canNotBePushed) == 0 {
+		return []*memo.GroupExpr{aggGroupExpr}, true, false, nil
+	}
+
+	// case2: sel->agg->sel->x
+	// agg group's schema remains the same
+	aggGroup := memo.NewGroupWithSchema(aggGroupExpr, old.Children[0].Prop.Schema)
+	notPushedSelPlan := plannercore.LogicalSelection{Conditions: canNotBePushed}.Init(sel.SCtx())
+	notPushedSelGroupExpr := memo.NewGroupExpr(notPushedSelPlan)
+	notPushedSelGroupExpr.SetChildren(aggGroup)
+	return []*memo.GroupExpr{notPushedSelGroupExpr}, true, false, nil
 }
 
 // TransformLimitToTopN transforms Limit+Sort to TopN.

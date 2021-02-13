@@ -53,6 +53,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// share session接口
 // Session context, it is consistent with the lifecycle of a client connection.
 type Session interface {
 	sessionctx.Context
@@ -578,6 +579,7 @@ func (s *session) execute(ctx context.Context, sql string) (recordSets []sqlexec
 
 	// Step1: Compile query string to abstract syntax trees(ASTs).
 	parseStartTime := time.Now()
+	// share parse sql 为ast
 	stmtNodes, warns, err := s.ParseSQL(ctx, sql, charsetInfo, collation)
 	if err != nil {
 		s.rollbackOnError(ctx)
@@ -600,6 +602,7 @@ func (s *session) execute(ctx context.Context, sql string) (recordSets []sqlexec
 		if err := executor.ResetContextOfStmt(s, stmtNode); err != nil {
 			return nil, err
 		}
+		// share 对stmtNode进行compile
 		stmt, err := compiler.Compile(ctx, stmtNode)
 		if err != nil {
 			s.rollbackOnError(ctx)
